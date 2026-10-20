@@ -350,17 +350,34 @@ internal static partial class Il2CppInteropManager
 
             Logger.LogMessage($"Downloading unity base libraries from {source}");
             using var httpClient = new HttpClient();
-            using var zipStream = httpClient.GetStreamAsync(uri).GetAwaiter().GetResult();
+
+            Stream zipStream;
             try
             {
-                using var writeStream = new FileStream(zipFilePath, FileMode.Create, FileAccess.Write, FileShare.None);
-                zipStream.CopyTo(writeStream);
+                zipStream = httpClient.GetStreamAsync(uri).GetAwaiter().GetResult();
             }
-            catch
+            catch (Exception e)
             {
-                // Delete the incomplete file to avoid issues on next startup
-                try { File.Delete(zipFilePath); } catch { }
-                throw;
+                throw new IOException(
+                    $"Failed to download Unity base libraries for Unity {unityVersion} from {source}: {e.Message}. " +
+                    $"Base libraries for this Unity version may not be available on the server yet. Download a matching " +
+                    $"base-libraries .zip and place it in the \"{UnityBaseLibsDirectory}\" (unity-libs) directory, or set " +
+                    $"the [IL2CPP] UnityBaseLibrariesSource config option to a valid URL.", e);
+            }
+
+            using (zipStream)
+            {
+                try
+                {
+                    using var writeStream = new FileStream(zipFilePath, FileMode.Create, FileAccess.Write, FileShare.None);
+                    zipStream.CopyTo(writeStream);
+                }
+                catch
+                {
+                    // Delete the incomplete file to avoid issues on next startup
+                    try { File.Delete(zipFilePath); } catch { }
+                    throw;
+                }
             }
         }
 
@@ -475,9 +492,23 @@ internal static partial class Il2CppInteropManager
 
     private static void RunIl2CppInteropGenerator(List<AsmResolver.DotNet.AssemblyDefinition> sourceAssemblies)
     {
+        string scanPath = null;
+        if (ScanMethodRefs.Value)
+        {
+            scanPath = GameAssemblyPath;
+            if (UseRuntimeAssemblies.Value)
+            {
+                var dumpPath = Path.Combine(IL2CPPRuntimeBinariesPath, "GameAssembly.dll");
+                if (File.Exists(dumpPath))
+                    scanPath = dumpPath;
+                else
+                    Logger.LogWarning($"Runtime dump not found at {dumpPath}, xref scan will use {scanPath} and offsets may not match.");
+            }
+        }
+
         var opts = new GeneratorOptions
         {
-            GameAssemblyPath = ScanMethodRefs.Value ? GameAssemblyPath : null,
+            GameAssemblyPath = scanPath,
             Source = sourceAssemblies,
             OutputDir = IL2CPPInteropAssemblyPath,
             UnityBaseLibsDir = Directory.Exists(UnityBaseLibsDirectory) ? UnityBaseLibsDirectory : null,

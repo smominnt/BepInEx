@@ -1,6 +1,7 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using BepInEx.Logging;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -29,18 +30,22 @@ namespace BepInEx
                 {
                     try
                     {
-                        Input.GetKeyDown(KeyCode.A);
-                        current = new LegacyInputSystem();
-                        Logging.Logger.Log(LogLevel.Debug, "[UnityInput] Using LegacyInputSystem");
-                    }
-                    catch (InvalidOperationException)
-                    {
-                        current = new NewInputSystem();
-                        Logging.Logger.Log(LogLevel.Debug, "[UnityInput] Using NewInputSystem");
+                        try
+                        {
+                            current = new LegacyInputSystem();
+                            BepInEx.Logging.Logger.Log(LogLevel.Debug, "[UnityInput] Using LegacyInputSystem");
+                        }
+                        catch
+                        {
+                            var newInputSystem = new NewInputSystem();
+                            current = newInputSystem;
+                            BepInEx.Logging.Logger.Log(LogLevel.Debug, "[UnityInput] Using NewInputSystem");
+                        }
                     }
                     catch (Exception ex)
                     {
-                        Logging.Logger.Log(LogLevel.Warning, "[UnityInput] Failed to detect available input systems - " + ex);
+                        current = new NullInputSystem();
+                        BepInEx.Logging.Logger.Log(LogLevel.Warning, "[UnityInput] Failed to detect available input systems - " + ex);
                     }
                 }
                 return current;
@@ -108,8 +113,44 @@ namespace BepInEx
         IEnumerable<KeyCode> SupportedKeyCodes { get; }
     }
 
+    internal class NullInputSystem : IInputSystem
+    {
+        public bool GetKey(string name) => false;
+
+        public bool GetKey(KeyCode key) => false;
+
+        public bool GetKeyDown(string name) => false;
+
+        public bool GetKeyDown(KeyCode key) => false;
+
+        public bool GetKeyUp(string name) => false;
+
+        public bool GetKeyUp(KeyCode key) => false;
+
+        public bool GetMouseButton(int button) => false;
+
+        public bool GetMouseButtonDown(int button) => false;
+
+        public bool GetMouseButtonUp(int button) => false;
+
+        public void ResetInputAxes() { }
+
+        public Vector3 mousePosition => Vector3.zero;
+        public Vector2 mouseScrollDelta => Vector2.zero;
+        public bool mousePresent => false;
+
+        public bool anyKey => false;
+
+        public bool anyKeyDown => false;
+
+        public IEnumerable<KeyCode> SupportedKeyCodes { get; } = Enumerable.Empty<KeyCode>();
+    }
+
     internal class NewInputSystem : IInputSystem
     {
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public NewInputSystem() => GetKeyDown(KeyCode.A);
+
         public bool GetKey(string name) => GetControl(name)?.isPressed ?? false;
 
         public bool GetKey(KeyCode key) => GetControl(key)?.isPressed ?? false;
@@ -810,12 +851,12 @@ namespace BepInEx
                     break;
                 case KeyCode.Joystick8Button19:
                     break;
-                //default:
-                //    throw new ArgumentOutOfRangeException(nameof(key), key, null);
+                    //default:
+                    //    throw new ArgumentOutOfRangeException(nameof(key), key, null);
             }
 
             if (!silent)
-                Logging.Logger.Log(LogLevel.Debug, $"[{nameof(NewInputSystem)}] Unsupported key: {key}");
+                BepInEx.Logging.Logger.Log(LogLevel.Debug, $"[{nameof(NewInputSystem)}] Unsupported key: {key}");
 
             return null;
         }
@@ -823,6 +864,9 @@ namespace BepInEx
 
     internal class LegacyInputSystem : IInputSystem
     {
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public LegacyInputSystem() => Input.GetKeyDown(KeyCode.A);
+
         public bool GetKey(string name) => Input.GetKey(name);
 
         public bool GetKey(KeyCode key) => Input.GetKey(key);
