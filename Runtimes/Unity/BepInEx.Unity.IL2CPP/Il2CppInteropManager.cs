@@ -492,9 +492,23 @@ internal static partial class Il2CppInteropManager
 
     private static void RunIl2CppInteropGenerator(List<AsmResolver.DotNet.AssemblyDefinition> sourceAssemblies)
     {
+        string scanPath = null;
+        if (ScanMethodRefs.Value)
+        {
+            scanPath = GameAssemblyPath;
+            if (UseRuntimeAssemblies.Value)
+            {
+                var dumpPath = Path.Combine(IL2CPPRuntimeBinariesPath, "GameAssembly.dll");
+                if (File.Exists(dumpPath))
+                    scanPath = dumpPath;
+                else
+                    Logger.LogWarning($"Runtime dump not found at {dumpPath}, xref scan will use {scanPath} and offsets may not match.");
+            }
+        }
+
         var opts = new GeneratorOptions
         {
-            GameAssemblyPath = ScanMethodRefs.Value ? GameAssemblyPath : null,
+            GameAssemblyPath = scanPath,
             Source = sourceAssemblies,
             OutputDir = IL2CPPInteropAssemblyPath,
             UnityBaseLibsDir = Directory.Exists(UnityBaseLibsDirectory) ? UnityBaseLibsDirectory : null,
